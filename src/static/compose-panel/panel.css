@@ -1,0 +1,261 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* L'attribut HTML `hidden` doit toujours l'emporter sur display:flex/block/etc. */
+[hidden] { display: none !important; }
+
+:root {
+  --color-bg: #1e1e2e;
+  --color-surface: #2a2a3e;
+  --color-surface-2: #313145;
+  --color-border: #44445a;
+  --color-text: #cdd6f4;
+  --color-text-muted: #a6adc8;
+  --color-primary: #89b4fa;
+  --color-success: #a6e3a1;
+  --color-danger: #f38ba8;
+  --radius: 6px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body {
+  width: 340px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+/* ─── Header ─────────────────────────────────────────────── */
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.panel-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-primary);
+  letter-spacing: 0.5px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+/* ─── Fields ─────────────────────────────────────────────── */
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+.select-input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  padding: 5px 8px;
+  font-size: 13px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.select-input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.textarea-input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 7px 9px;
+  resize: vertical;
+  width: 100%;
+  min-height: 80px;
+}
+
+.textarea-input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.textarea-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* ─── Mode buttons ───────────────────────────────────────── */
+
+.mode-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.mode-btn {
+  flex: 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 5px 2px;
+  transition: all 0.12s;
+  text-align: center;
+}
+
+.mode-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.mode-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-bg);
+  font-weight: 600;
+}
+
+.mode-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Action row ─────────────────────────────────────────── */
+
+.action-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ─── Buttons ────────────────────────────────────────────── */
+
+.btn {
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  transition: opacity 0.12s, transform 0.08s;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) { opacity: 0.85; }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary { background: var(--color-primary); color: var(--color-bg); }
+.btn-success { background: var(--color-success); color: var(--color-bg); }
+.btn-danger  { background: var(--color-danger);  color: white; }
+.btn-record  { background: var(--color-danger);  color: white; font-size: 13px; }
+
+/* ─── Loader ─────────────────────────────────────────────── */
+
+.loader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.spinner {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+
+/* ─── Toast ──────────────────────────────────────────────── */
+
+.update-toast {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius);
+  color: var(--color-success);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  text-align: center;
+}
+
+/* ─── Error banner ───────────────────────────────────────── */
+
+.error-banner {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  color: var(--color-danger);
+  font-size: 12px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+#error-message {
+  flex: 1;
+  word-break: break-word;
+}
+
+.error-close {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}

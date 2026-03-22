@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dactylo - Paramètres</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="page-header">
+        <h1 class="page-title">⚙ Dactylo — Paramètres</h1>
+      </header>
+
+      <!-- Onglets de navigation -->
+      <nav class="tabs" role="tablist">
+        <button
+          class="tab active"
+          data-tab="llm"
+          role="tab"
+          aria-selected="true"
+        >
+          LLM
+        </button>
+        <button class="tab" data-tab="prompts" role="tab" aria-selected="false">
+          Prompts
+        </button>
+        <button class="tab" data-tab="mcp" role="tab" aria-selected="false">
+          Serveurs MCP
+        </button>
+      </nav>
+
+      <!-- Onglet LLM -->
+      <section id="tab-llm" class="tab-content active" role="tabpanel">
+        <h2>Configuration LLM</h2>
+        <p class="section-desc">
+          Configurez votre endpoint OpenAI-compatible et les paramètres du
+          modèle.
+        </p>
+
+        <div class="form-group">
+          <label for="llm-endpoint">Endpoint API</label>
+          <input
+            type="url"
+            id="llm-endpoint"
+            placeholder="https://api.openai.com/v1"
+          />
+          <span class="hint"
+            >URL de base de l'API (sans /chat/completions)</span
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="llm-api-key">Clé API</label>
+          <div class="input-with-toggle">
+            <input
+              type="password"
+              id="llm-api-key"
+              placeholder="sk-…"
+              autocomplete="off"
+            />
+            <button
+              class="toggle-visibility"
+              data-target="llm-api-key"
+              title="Afficher/masquer"
+            >
+              👁
+            </button>
+          </div>
+          <span class="hint"
+            >Stockée localement dans l'extension (non chiffrée)</span
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="llm-model">Modèle</label>
+          <input type="text" id="llm-model" placeholder="gpt-4o" />
+        </div>
+
+        <div class="form-group">
+          <label for="llm-temperature"
+            >Température : <span id="llm-temp-value">0.7</span></label
+          >
+          <input
+            type="range"
+            id="llm-temperature"
+            min="0"
+            max="2"
+            step="0.1"
+            value="0.7"
+          />
+          <span class="hint">0 = déterministe, 2 = très créatif</span>
+        </div>
+
+        <div class="form-group">
+          <label for="llm-max-tokens">Tokens max</label>
+          <input
+            type="number"
+            id="llm-max-tokens"
+            min="256"
+            max="32768"
+            step="256"
+            value="2048"
+          />
+        </div>
+
+        <div class="form-actions">
+          <button id="btn-test-llm" class="btn btn-secondary">
+            Tester la connexion
+          </button>
+          <button id="btn-save-llm" class="btn btn-primary">Sauvegarder</button>
+          <span id="llm-status" class="status-msg"></span>
+        </div>
+      </section>
+
+      <!-- Onglet Prompts -->
+      <section id="tab-prompts" class="tab-content" role="tabpanel" hidden>
+        <h2>Prompts système</h2>
+        <p class="section-desc">
+          Définissez les prompts système disponibles dans le panel de
+          composition.
+        </p>
+
+        <div class="form-actions" style="margin-bottom: 12px">
+          <button id="btn-add-prompt" class="btn btn-primary">
+            + Ajouter un prompt
+          </button>
+        </div>
+
+        <div id="prompts-list" class="prompts-list"></div>
+
+        <!-- Formulaire d'édition de prompt (inline) -->
+        <div id="prompt-editor" class="prompt-editor card" hidden>
+          <h3 id="prompt-editor-title">Nouveau prompt</h3>
+          <div class="form-group">
+            <label for="prompt-name">Nom</label>
+            <input type="text" id="prompt-name" placeholder="Mon assistant" />
+          </div>
+          <div class="form-group">
+            <label for="prompt-content">Contenu du prompt</label>
+            <textarea
+              id="prompt-content"
+              rows="6"
+              placeholder="Tu es un assistant…"
+            ></textarea>
+          </div>
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="prompt-is-default" />
+              Prompt par défaut
+            </label>
+          </div>
+          <div class="form-actions">
+            <button id="btn-save-prompt" class="btn btn-primary">
+              Sauvegarder
+            </button>
+            <button id="btn-cancel-prompt" class="btn btn-secondary">
+              Annuler
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Onglet MCP -->
+      <section id="tab-mcp" class="tab-content" role="tabpanel" hidden>
+        <h2>Serveurs MCP</h2>
+        <p class="section-desc">
+          Configurez les serveurs MCP accessibles via HTTP (transport Streamable
+          HTTP uniquement). Les serveurs stdio ne sont pas supportés directement
+          — lancez-les séparément avec un wrapper HTTP.
+        </p>
+
+        <div class="form-actions" style="margin-bottom: 12px">
+          <button id="btn-add-mcp" class="btn btn-primary">
+            + Ajouter un serveur
+          </button>
+        </div>
+
+        <div id="mcp-list" class="mcp-list"></div>
+
+        <!-- Formulaire d'ajout de serveur MCP -->
+        <div id="mcp-editor" class="mcp-editor card" hidden>
+          <h3>Nouveau serveur MCP</h3>
+          <div class="form-group">
+            <label for="mcp-name">Nom</label>
+            <input type="text" id="mcp-name" placeholder="Mon serveur MCP" />
+          </div>
+          <div class="form-group">
+            <label for="mcp-url">URL du serveur</label>
+            <input
+              type="url"
+              id="mcp-url"
+              placeholder="http://localhost:3000/mcp"
+            />
+          </div>
+          <div class="form-group">
+            <label>Entêtes HTTP <span class="hint">(optionnel, ex. Authorization: Bearer …)</span></label>
+            <div id="mcp-headers-list"></div>
+            <button type="button" id="btn-add-mcp-header" class="btn btn-secondary btn-sm" style="margin-top:6px">+ Ajouter un entête</button>
+          </div>
+          <div class="form-actions">
+            <button id="btn-save-mcp" class="btn btn-primary">Ajouter</button>
+            <button id="btn-cancel-mcp" class="btn btn-secondary">
+              Annuler
+            </button>
+            <span id="mcp-test-status" class="status-msg"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

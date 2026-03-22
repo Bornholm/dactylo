@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dactylo</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="panel-header">
+        <span class="panel-title">Dactylo</span>
+      </header>
+
+      <!-- Sélecteur de prompt système -->
+      <div class="field-group">
+        <label for="prompt-select" class="field-label">Prompt</label>
+        <select id="prompt-select" class="select-input">
+          <option value="">Chargement…</option>
+        </select>
+      </div>
+
+      <!-- Boutons de mode (préréglages) -->
+      <div class="mode-buttons" role="group" aria-label="Mode">
+        <button class="mode-btn active" data-mode="improve">Améliorer</button>
+        <button class="mode-btn" data-mode="correct">Corriger</button>
+        <button class="mode-btn" data-mode="compose">Rédiger</button>
+      </div>
+
+      <!-- Instructions -->
+      <div class="field-group">
+        <label for="instruction-input" class="field-label">Instructions</label>
+        <textarea
+          id="instruction-input"
+          class="textarea-input"
+          rows="4"
+          placeholder="Décrivez ce que vous souhaitez faire…"
+        ></textarea>
+      </div>
+
+      <div class="action-row">
+        <button id="btn-run" class="btn btn-primary">▶ Lancer</button>
+        <button id="btn-cancel" class="btn btn-danger" hidden>✕ Annuler</button>
+      </div>
+
+      <!-- Indicateur de traitement -->
+      <div id="loader" class="loader" hidden>
+        <div class="spinner"></div>
+        <span class="loader-text">Traitement en cours…</span>
+      </div>
+
+      <!-- Toast de confirmation -->
+      <div id="update-toast" class="update-toast" hidden>
+        ✓ Courriel mis à jour
+      </div>
+
+      <!-- Bannière d'erreur -->
+      <div id="error-banner" class="error-banner" hidden>
+        <span id="error-message"></span>
+        <button id="btn-close-error" class="error-close" title="Fermer">
+          ✕
+        </button>
+      </div>
+    </div>
+    <script src="panel.js"></script>
+  </body>
+</html>
