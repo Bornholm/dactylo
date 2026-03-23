@@ -165,9 +165,11 @@
       <section id="tab-mcp" class="tab-content" role="tabpanel" hidden>
         <h2>Serveurs MCP</h2>
         <p class="section-desc">
-          Configurez les serveurs MCP accessibles via HTTP (transport Streamable
-          HTTP uniquement). Les serveurs stdio ne sont pas supportés directement
-          — lancez-les séparément avec un wrapper HTTP.
+          Configurez les serveurs MCP accessibles via HTTP. Les transports
+          Streamable HTTP et SSE sont supportés (les URLs se terminant par
+          <code>/sse</code> utilisent automatiquement le transport SSE). Les
+          serveurs stdio ne sont pas supportés directement — lancez-les
+          séparément avec un wrapper HTTP.
         </p>
 
         <div class="form-actions" style="margin-bottom: 12px">
@@ -177,10 +179,11 @@
         </div>
 
         <div id="mcp-list" class="mcp-list"></div>
+        <span id="mcp-global-status" class="status-msg"></span>
 
-        <!-- Formulaire d'ajout de serveur MCP -->
+        <!-- Formulaire d'ajout/modification de serveur MCP -->
         <div id="mcp-editor" class="mcp-editor card" hidden>
-          <h3>Nouveau serveur MCP</h3>
+          <h3 id="mcp-editor-title">Nouveau serveur MCP</h3>
           <div class="form-group">
             <label for="mcp-name">Nom</label>
             <input type="text" id="mcp-name" placeholder="Mon serveur MCP" />

@@ -210,6 +210,7 @@ async function setDefaultPrompt(id: string) {
 const mcpList = document.getElementById("mcp-list") as HTMLDivElement;
 const btnAddMCP = document.getElementById("btn-add-mcp") as HTMLButtonElement;
 const mcpEditor = document.getElementById("mcp-editor") as HTMLDivElement;
+const mcpEditorTitle = document.getElementById("mcp-editor-title") as HTMLHeadingElement;
 const mcpNameInput = document.getElementById("mcp-name") as HTMLInputElement;
 const mcpUrlInput = document.getElementById("mcp-url") as HTMLInputElement;
 const mcpHeadersList = document.getElementById("mcp-headers-list") as HTMLDivElement;
@@ -217,6 +218,9 @@ const btnAddMCPHeader = document.getElementById("btn-add-mcp-header") as HTMLBut
 const btnSaveMCP = document.getElementById("btn-save-mcp") as HTMLButtonElement;
 const btnCancelMCP = document.getElementById("btn-cancel-mcp") as HTMLButtonElement;
 const mcpTestStatus = document.getElementById("mcp-test-status") as HTMLSpanElement;
+const mcpGlobalStatus = document.getElementById("mcp-global-status") as HTMLSpanElement;
+
+let editingMCPServerId: string | null = null;
 
 function addMCPHeaderRow(name = "", value = "") {
   const row = document.createElement("div");
@@ -267,6 +271,7 @@ async function loadMCPServers() {
       <div class="mcp-item-actions">
         <input type="checkbox" class="toggle-switch mcp-toggle" data-id="${server.id}" ${server.enabled ? "checked" : ""} title="${server.enabled ? "Activé" : "Désactivé"}" />
         <button class="btn btn-secondary btn-sm btn-test-mcp" data-id="${server.id}" data-url="${escapeHtml(server.url)}">Tester</button>
+        <button class="btn btn-secondary btn-sm btn-edit-mcp" data-id="${server.id}">Modifier</button>
         <button class="btn btn-danger btn-sm btn-delete-mcp" data-id="${server.id}">Supprimer</button>
       </div>
     `;
@@ -279,18 +284,28 @@ async function loadMCPServers() {
   mcpList.querySelectorAll<HTMLButtonElement>(".btn-test-mcp").forEach((btn) => {
     btn.addEventListener("click", () => testMCPServer(btn.dataset["id"]!, btn.dataset["url"]!));
   });
+  mcpList.querySelectorAll<HTMLButtonElement>(".btn-edit-mcp").forEach((btn) => {
+    btn.addEventListener("click", () => openEditMCPServer(btn.dataset["id"]!));
+  });
   mcpList.querySelectorAll<HTMLButtonElement>(".btn-delete-mcp").forEach((btn) => {
     btn.addEventListener("click", () => deleteMCPServer(btn.dataset["id"]!));
   });
 }
 
 btnAddMCP.addEventListener("click", () => {
+  editingMCPServerId = null;
+  mcpEditorTitle.textContent = "Nouveau serveur MCP";
+  btnSaveMCP.textContent = "Ajouter";
+  mcpNameInput.value = "";
+  mcpUrlInput.value = "";
+  mcpHeadersList.innerHTML = "";
   mcpEditor.hidden = false;
   mcpNameInput.focus();
 });
 
 btnCancelMCP.addEventListener("click", () => {
   mcpEditor.hidden = true;
+  editingMCPServerId = null;
   mcpNameInput.value = "";
   mcpUrlInput.value = "";
   mcpHeadersList.innerHTML = "";
@@ -306,34 +321,47 @@ btnSaveMCP.addEventListener("click", async () => {
 
   const headers = collectMCPHeaders();
 
-  // Tester la connexion avant d'ajouter
   showStatus(mcpTestStatus, "Test en cours…", "");
   const response = await browser.runtime.sendMessage({ action: "TEST_MCP_CONNECTION", url, headers }) as { success: boolean; error?: string };
+  const lastStatus: MCPServer["lastStatus"] = response.success ? "connected" : "error";
+  const isEditing = editingMCPServerId !== null;
 
-  const server: MCPServer = {
-    id: generateId(),
-    name,
-    url,
-    enabled: true,
-    lastStatus: response.success ? "connected" : "error",
-    ...(Object.keys(headers).length > 0 ? { headers } : {}),
-  };
+  let servers = await storageGet("mcpServers");
 
-  const servers = await storageGet("mcpServers");
-  servers.push(server);
-  await storageSet("mcpServers", servers);
-
-  if (response.success) {
-    showStatus(mcpTestStatus, "Serveur ajouté et connecté ✓", "success");
+  if (isEditing) {
+    servers = servers.map((s) =>
+      s.id === editingMCPServerId
+        ? { ...s, name, url, lastStatus, ...(Object.keys(headers).length > 0 ? { headers } : { headers: undefined }) }
+        : s
+    );
   } else {
-    showStatus(mcpTestStatus, `Ajouté mais connexion échouée : ${response.error}`, "error");
+    servers.push({
+      id: generateId(),
+      name,
+      url,
+      enabled: true,
+      lastStatus,
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+    });
   }
 
+  await storageSet("mcpServers", servers);
+
+  // Fermer l'éditeur avant d'afficher le résultat (mcpTestStatus est dans l'éditeur)
   mcpEditor.hidden = true;
+  mcpTestStatus.textContent = "";
+  editingMCPServerId = null;
   mcpNameInput.value = "";
   mcpUrlInput.value = "";
   mcpHeadersList.innerHTML = "";
   await loadMCPServers();
+
+  const verb = isEditing ? "Modifié" : "Ajouté";
+  if (response.success) {
+    showStatus(mcpGlobalStatus, `${verb} et connecté ✓`, "success");
+  } else {
+    showStatus(mcpGlobalStatus, `${verb} mais connexion échouée : ${response.error}`, "error");
+  }
 });
 
 async function toggleMCPServer(id: string, enabled: boolean) {
@@ -343,6 +371,7 @@ async function toggleMCPServer(id: string, enabled: boolean) {
 }
 
 async function testMCPServer(id: string, url: string) {
+  showStatus(mcpGlobalStatus, "Test en cours…", "");
   const servers = await storageGet("mcpServers");
   const server = servers.find((s) => s.id === id);
   const response = await browser.runtime.sendMessage({
@@ -355,6 +384,11 @@ async function testMCPServer(id: string, url: string) {
   );
   await storageSet("mcpServers", updated);
   await loadMCPServers();
+  if (response.success) {
+    showStatus(mcpGlobalStatus, "Connexion réussie ✓", "success");
+  } else {
+    showStatus(mcpGlobalStatus, `Connexion échouée : ${response.error}`, "error");
+  }
 }
 
 async function deleteMCPServer(id: string) {
@@ -362,6 +396,24 @@ async function deleteMCPServer(id: string) {
   const servers = await storageGet("mcpServers");
   await storageSet("mcpServers", servers.filter((s) => s.id !== id));
   await loadMCPServers();
+}
+
+async function openEditMCPServer(id: string) {
+  const servers = await storageGet("mcpServers");
+  const server = servers.find((s) => s.id === id);
+  if (!server) return;
+
+  editingMCPServerId = id;
+  mcpEditorTitle.textContent = "Modifier le serveur MCP";
+  btnSaveMCP.textContent = "Enregistrer";
+  mcpNameInput.value = server.name;
+  mcpUrlInput.value = server.url;
+  mcpHeadersList.innerHTML = "";
+  for (const [name, value] of Object.entries(server.headers ?? {})) {
+    addMCPHeaderRow(name, value);
+  }
+  mcpEditor.hidden = false;
+  mcpNameInput.focus();
 }
 
 // ─── Utilitaires ─────────────────────────────────────────────────────────

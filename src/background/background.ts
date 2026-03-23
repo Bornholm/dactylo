@@ -1,6 +1,7 @@
 import type { BackgroundMessage, BackgroundResponse, PopupMessage, ToolDefinition } from "../shared/types.js";
 import { storageGet, getComposeState, setComposeState, deleteComposeState } from "../shared/storage.js";
 import { callLLM, cancelLLMStream, type ChatMessage } from "./llm-client.js";
+import { initializeMCPSession, closeMCPSession } from "./mcp-client.js";
 
 /** Outil exposé au LLM pour éditer directement le corps du courriel */
 const UPDATE_EMAIL_TOOL: ToolDefinition = {
@@ -328,23 +329,8 @@ async function handleTestLLMConnection(): Promise<BackgroundResponse> {
 
 async function handleTestMCPConnection(url: string, extraHeaders?: Record<string, string>): Promise<BackgroundResponse> {
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...extraHeaders },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: "2024-11-05",
-          capabilities: {},
-          clientInfo: { name: "Dactylo", version: "0.1.0" },
-        },
-      }),
-    });
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}: ${response.statusText}` };
-    }
+    const { sessionId } = await initializeMCPSession(url, extraHeaders);
+    closeMCPSession(sessionId);
     return { success: true };
   } catch (e) {
     return { success: false, error: String(e) };
