@@ -1,6 +1,6 @@
 {
   "name": "dactylo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Extension Thunderbird - Assistant LLM pour la rédaction d'emails",
   "private": true,
   "type": "module",
