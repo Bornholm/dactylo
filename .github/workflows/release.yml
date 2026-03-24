@@ -24,6 +24,8 @@ jobs:
 
       - name: Build and package
         run: npm run package
+        env:
+          VERSION: ${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

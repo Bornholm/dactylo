@@ -1,7 +1,19 @@
 import * as esbuild from "esbuild";
-import { copyFileSync, mkdirSync, readdirSync } from "fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
+
+function getVersion() {
+  const envVersion = process.env.VERSION;
+  if (envVersion) return envVersion.replace(/^v/, "");
+  try {
+    return execSync("git describe --tags --abbrev=0").toString().trim().replace(/^v/, "");
+  } catch {
+    return "0.0.0-dev";
+  }
+}
+
+const version = getVersion();
 
 const isWatch = process.argv.includes("--watch");
 
@@ -48,7 +60,9 @@ async function build() {
   // Copier les fichiers statiques
   copyStatic("src/static", "dist");
   copyStatic("icons", "dist/icons");
-  copyFileSync("manifest.json", "dist/manifest.json");
+  const manifest = JSON.parse(readFileSync("manifest.json", "utf-8"));
+  manifest.version = version;
+  writeFileSync("dist/manifest.json", JSON.stringify(manifest, null, 2));
 
   // Copier le WASM et son runtime Go
   mkdirSync("dist/background", { recursive: true });

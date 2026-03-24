@@ -8,7 +8,10 @@
     "build": "node esbuild.config.js",
     "watch": "node esbuild.config.js --watch",
     "package": "npm run build && cd dist && zip -r ../dactylo.xpi . && cd ..",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^120.0.4",
