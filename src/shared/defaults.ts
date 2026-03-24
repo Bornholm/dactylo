@@ -1,6 +1,7 @@
 import type { LLMConfig, StorageSchema } from "./types.js";
 
 export const DEFAULT_LLM_CONFIG: LLMConfig = {
+  provider: "openai",
   endpoint: "https://api.openai.com/v1",
   apiKey: "",
   model: "gpt-4o",

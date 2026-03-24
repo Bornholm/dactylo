@@ -174,10 +174,15 @@ function onCancel() {
 function handleBackgroundMessage(msg: PopupMessage) {
   if (msg.action === "EMAIL_UPDATED") {
     showToast();
+  } else if (msg.action === "BACKGROUND_ERROR") {
+    setStreaming(false);
+    showError(msg.message);
   }
 }
 
 // ─── État streaming ────────────────────────────────────────────────────────
+
+let keepaliveInterval: ReturnType<typeof setInterval> | null = null;
 
 function setStreaming(on: boolean) {
   btnRun.hidden = on;
@@ -186,6 +191,19 @@ function setStreaming(on: boolean) {
   promptSelect.disabled = on;
   modeBtns.forEach(btn => (btn.disabled = on));
   instructionInput.disabled = on;
+
+  if (on) {
+    // Envoyer un KEEPALIVE toutes les 20s pour maintenir la page background active
+    // (Firefox MV3 termine les event pages après 30s sans événement WebExtension)
+    keepaliveInterval = setInterval(() => {
+      sendMessage({ action: "KEEPALIVE" }).catch(() => {});
+    }, 20_000);
+  } else {
+    if (keepaliveInterval !== null) {
+      clearInterval(keepaliveInterval);
+      keepaliveInterval = null;
+    }
+  }
 }
 
 // ─── Toast / erreur ────────────────────────────────────────────────────────

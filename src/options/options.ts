@@ -32,6 +32,7 @@ document.querySelectorAll<HTMLButtonElement>(".toggle-visibility").forEach((btn)
 
 // ─── Onglet LLM ──────────────────────────────────────────────────────────
 
+const llmProvider = document.getElementById("llm-provider") as HTMLSelectElement;
 const llmEndpoint = document.getElementById("llm-endpoint") as HTMLInputElement;
 const llmApiKey = document.getElementById("llm-api-key") as HTMLInputElement;
 const llmModel = document.getElementById("llm-model") as HTMLInputElement;
@@ -44,6 +45,7 @@ const llmStatus = document.getElementById("llm-status") as HTMLSpanElement;
 
 async function loadLLMSettings() {
   const config = await storageGet("llm");
+  llmProvider.value = config.provider ?? "openai";
   llmEndpoint.value = config.endpoint;
   llmApiKey.value = config.apiKey;
   llmModel.value = config.model;
@@ -58,6 +60,7 @@ llmTemperature.addEventListener("input", () => {
 
 btnSaveLLM.addEventListener("click", async () => {
   const config: LLMConfig = {
+    provider: llmProvider.value as LLMConfig["provider"],
     endpoint: llmEndpoint.value.trim().replace(/\/$/, ""),
     apiKey: llmApiKey.value.trim(),
     model: llmModel.value.trim(),

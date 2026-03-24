@@ -1,5 +1,6 @@
 // Configuration du serveur LLM
 export interface LLMConfig {
+  provider: "openai" | "mistral" | "openrouter";
   endpoint: string;
   apiKey: string;
   model: string;
@@ -71,10 +72,12 @@ export type BackgroundMessage =
   | { action: "LLM_CANCEL"; tabId: number }
   | { action: "APPLY_CONTENT"; tabId: number; content: string; isPlainText: boolean }
   | { action: "TEST_LLM_CONNECTION" }
-  | { action: "TEST_MCP_CONNECTION"; url: string; headers?: Record<string, string> };
+  | { action: "TEST_MCP_CONNECTION"; url: string; headers?: Record<string, string> }
+  | { action: "KEEPALIVE" };
 
 export type PopupMessage =
-  | { action: "EMAIL_UPDATED" };
+  | { action: "EMAIL_UPDATED" }
+  | { action: "BACKGROUND_ERROR"; message: string };
 
 // Métadonnées du courriel retournées avec le contenu
 export interface ComposeContext {

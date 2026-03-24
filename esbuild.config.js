@@ -1,6 +1,7 @@
 import * as esbuild from "esbuild";
-import { copyFileSync, mkdirSync, readdirSync, statSync } from "fs";
-import { join, relative } from "path";
+import { copyFileSync, mkdirSync, readdirSync } from "fs";
+import { join } from "path";
+import { execSync } from "child_process";
 
 const isWatch = process.argv.includes("--watch");
 
@@ -48,6 +49,11 @@ async function build() {
   copyStatic("src/static", "dist");
   copyStatic("icons", "dist/icons");
   copyFileSync("manifest.json", "dist/manifest.json");
+
+  // Copier le WASM et son runtime Go
+  mkdirSync("dist/background", { recursive: true });
+  copyFileSync("vendor/genai/genai.wasm", "dist/background/genai.wasm");
+  copyFileSync(`vendor/genai/wasm_exec.js`, "dist/background/wasm_exec.js");
 
   if (isWatch) {
     const ctx = await esbuild.context({

@@ -1,32 +1,7 @@
-import type { BackgroundMessage, BackgroundResponse, PopupMessage, ToolDefinition } from "../shared/types.js";
+import type { BackgroundMessage, BackgroundResponse, PopupMessage } from "../shared/types.js";
 import { storageGet, getComposeState, setComposeState, deleteComposeState } from "../shared/storage.js";
-import { callLLM, cancelLLMStream, type ChatMessage } from "./llm-client.js";
+import { initGenAI, callLLM, cancelLLMStream } from "./genai-client.js";
 import { initializeMCPSession, closeMCPSession } from "./mcp-client.js";
-
-/** Outil exposé au LLM pour éditer directement le corps du courriel */
-const UPDATE_EMAIL_TOOL: ToolDefinition = {
-  type: "function",
-  function: {
-    name: "update_email",
-    description:
-      "Remplace le corps du courriel en cours de rédaction par le contenu fourni. " +
-      "Utilise cet outil pour appliquer directement tes modifications. " +
-      "IMPORTANT : ne pas inclure l'objet (sujet) du courriel dans le contenu. " +
-      "IMPORTANT : ne pas inclure la signature — elle est préservée automatiquement.",
-    parameters: {
-      type: "object",
-      properties: {
-        content: {
-          type: "string",
-          description:
-            "Le nouveau corps du courriel uniquement (texte brut, sans HTML). " +
-            "Ne pas inclure l'objet ni la signature.",
-        },
-      },
-      required: ["content"],
-    },
-  },
-};
 
 // Signature préservée par tabId (lue une seule fois au début du LLM_REQUEST)
 const storedSignatures = new Map<number, string>();
@@ -114,6 +89,12 @@ function textToHtml(text: string): string {
     .join("");
 }
 
+// Initialiser le runtime WASM au démarrage
+initGenAI(
+  (tabId, content, isPlainText) => applyBodyText(tabId, content, isPlainText),
+  () => { browser.runtime.sendMessage({ action: "EMAIL_UPDATED" } as PopupMessage).catch(() => {}); }
+);
+
 // Écouter les messages du popup
 browser.runtime.onMessage.addListener(
   (rawMessage: unknown, sender): Promise<BackgroundResponse> | true => {
@@ -138,6 +119,9 @@ browser.runtime.onMessage.addListener(
 
       case "TEST_MCP_CONNECTION":
         return handleTestMCPConnection(message.url, message.headers);
+
+      case "KEEPALIVE":
+        return Promise.resolve({ success: true });
 
       default:
         return Promise.resolve({ success: false, error: "Action inconnue" });
@@ -208,21 +192,14 @@ async function handleGetComposeContent(tabId: number): Promise<BackgroundRespons
 
 async function handleLLMRequest(
   message: Extract<BackgroundMessage, { action: "LLM_REQUEST" }>,
-  senderTabId: number
+  _senderTabId: number
 ): Promise<BackgroundResponse> {
-  const { tabId, systemPrompt, userMessage, history, mode } = message;
-
-
-  // Construire les messages à envoyer au LLM
-  const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: userMessage },
-  ];
+  const { tabId, systemPrompt, userMessage } = message;
 
   const llmConfig = await storageGet("llm");
+  const mcpServers = await storageGet("mcpServers");
 
-  // Lire le format, stocker la signature et le thread tail une seule fois avant le streaming
+  // Lire le format, stocker la signature et le thread tail une seule fois avant l'appel
   let isPlainText = false;
   try {
     const details = await browser.compose.getComposeDetails(tabId);
@@ -236,8 +213,6 @@ async function handleLLMRequest(
       const raw = details.body ?? "";
       const { bodyHtml, signatureHtml } = extractSignatureFromHtml(raw);
       storedSignatures.set(tabId, signatureHtml);
-      // Le thread tail est dans bodyHtml si la signature est après le blockquote,
-      // ou dans signatureHtml si la signature est avant (Thunderbird le transporte avec elle).
       storedThreadTails.set(tabId, extractHtmlThreadTail(bodyHtml));
     }
   } catch {
@@ -245,34 +220,16 @@ async function handleLLMRequest(
   }
 
   return new Promise<BackgroundResponse>((resolve) => {
-    const onDone = () => {
-      resolve({ success: true });
-    };
-
-    const onError = (error: string) => {
-      resolve({ success: false, error });
-    };
-
-    // Exécuteur des outils : update_email applique le contenu directement
-    const executor = async (name: string, args: Record<string, unknown>): Promise<string> => {
-      if (name === "update_email") {
-        const content = args["content"];
-        if (typeof content !== "string") {
-          return "Erreur : le paramètre 'content' doit être une chaîne de caractères.";
-        }
-        try {
-          await applyBodyText(tabId, content, isPlainText);
-          const msg: PopupMessage = { action: "EMAIL_UPDATED" };
-          browser.runtime.sendMessage(msg).catch(() => {});
-          return "Courriel mis à jour avec succès.";
-        } catch (e) {
-          return `Erreur lors de la mise à jour du courriel : ${String(e)}`;
-        }
-      }
-      return `Outil inconnu : ${name}`;
-    };
-
-    callLLM(llmConfig, messages, [UPDATE_EMAIL_TOOL], tabId, onDone, onError, executor);
+    callLLM(
+      llmConfig,
+      systemPrompt,
+      userMessage,
+      tabId,
+      isPlainText,
+      mcpServers,
+      () => resolve({ success: true }),
+      (error) => resolve({ success: false, error })
+    ).catch((e: unknown) => resolve({ success: false, error: String(e) }));
   });
 }
 

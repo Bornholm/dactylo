@@ -1,5 +1,16 @@
 /** Client MCP - supporte Streamable HTTP et SSE (avec en-têtes HTTP personnalisés) */
 
+/** Timeout pour les appels aux outils MCP (ms) — peut être long selon l'outil */
+const MCP_TOOL_TIMEOUT_MS = 120_000;
+/** Timeout pour les opérations de protocole (initialize, tools/list, etc.) */
+const MCP_PROTOCOL_TIMEOUT_MS = 30_000;
+
+function withTimeout(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(id) };
+}
+
 interface MCPInitializeResult {
   sessionId: string;
   capabilities: Record<string, unknown>;
@@ -16,10 +27,16 @@ interface MCPCallResult {
   isError?: boolean;
 }
 
+interface SSEPendingEntry {
+  resolve: (data: unknown) => void;
+  reject: (err: Error) => void;
+}
+
 interface SSESession {
   close: () => void;
   postUrl: string;
-  pending: Map<number | string, (data: unknown) => void>;
+  pending: Map<number | string, SSEPendingEntry>;
+  keepaliveId?: ReturnType<typeof setInterval>;
 }
 
 // Sessions SSE actives (clé = sessionId généré côté client)
@@ -60,7 +77,7 @@ async function openSSESession(
   }
 
   const sessionId = generateSessionId();
-  const pending = new Map<number | string, (data: unknown) => void>();
+  const pending = new Map<number | string, SSEPendingEntry>();
   const reader = response.body.getReader();
 
   return new Promise((resolve, reject) => {
@@ -86,10 +103,10 @@ async function openSSESession(
         try {
           const parsed = JSON.parse(data) as { id?: number | string };
           if (parsed.id !== undefined) {
-            const callback = pending.get(parsed.id);
-            if (callback) {
+            const entry = pending.get(parsed.id);
+            if (entry) {
               pending.delete(parsed.id);
-              callback(parsed);
+              entry.resolve(parsed);
             }
           }
         } catch {
@@ -133,6 +150,24 @@ async function openSSESession(
         if (!sseSessions.has(sessionId)) {
           reject(err instanceof Error ? err : new Error(String(err)));
         }
+      } finally {
+        // Arrêter le keepalive si le flux meurt de lui-même (hors closeMCPSession).
+        const dyingSession = sseSessions.get(sessionId);
+        if (dyingSession?.keepaliveId !== undefined) {
+          clearInterval(dyingSession.keepaliveId);
+          delete dyingSession.keepaliveId;
+        }
+        // Rejeter immédiatement tous les appels en attente quand le flux SSE
+        // se termine (normalement ou par erreur), au lieu d'attendre le timeout.
+        // On utilise `pending` par closure plutôt que sseSessions.get() car
+        // closeMCPSession peut avoir supprimé la session de la map avant ce bloc.
+        if (pending.size > 0) {
+          const streamErr = new Error("Connexion SSE interrompue");
+          for (const entry of pending.values()) {
+            entry.reject(streamErr);
+          }
+          pending.clear();
+        }
       }
     }
 
@@ -152,7 +187,8 @@ async function postSSE(
   sessionId: string,
   method: string,
   params: object,
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  timeoutMs: number = MCP_PROTOCOL_TIMEOUT_MS
 ): Promise<unknown> {
   const session = sseSessions.get(sessionId);
   if (!session) throw new Error("Session SSE introuvable");
@@ -163,11 +199,11 @@ async function postSSE(
     const timeout = setTimeout(() => {
       session.pending.delete(requestId);
       reject(new Error(`Timeout MCP SSE pour la méthode: ${method}`));
-    }, 30000);
+    }, timeoutMs);
 
-    session.pending.set(requestId, (data) => {
-      clearTimeout(timeout);
-      resolve(data);
+    session.pending.set(requestId, {
+      resolve: (data) => { clearTimeout(timeout); resolve(data); },
+      reject: (err) => { clearTimeout(timeout); reject(err); },
     });
 
     fetch(session.postUrl, {
@@ -193,6 +229,7 @@ async function postSSE(
 export function closeMCPSession(sessionId: string): void {
   const session = sseSessions.get(sessionId);
   if (session) {
+    if (session.keepaliveId !== undefined) clearInterval(session.keepaliveId);
     session.close();
     sseSessions.delete(sessionId);
   }
@@ -229,6 +266,23 @@ async function initializeMCPSessionSSE(
     body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
   });
 
+  // Keepalive SSE : envoyer un ping MCP toutes les 20 s pour éviter
+  // que le serveur (ou un proxy) ferme la connexion SSE inactive.
+  let pingCounter = 0;
+  session.keepaliveId = setInterval(() => {
+    const s = sseSessions.get(sessionId);
+    if (!s) return;
+    const pingId = `ka-${++pingCounter}`;
+    s.pending.set(pingId, { resolve: () => {}, reject: () => {} });
+    // Nettoyage automatique si la réponse ne revient jamais
+    setTimeout(() => s.pending.delete(pingId), 10_000);
+    fetch(s.postUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...extraHeaders },
+      body: JSON.stringify({ jsonrpc: "2.0", id: pingId, method: "ping", params: {} }),
+    }).catch(() => s.pending.delete(pingId));
+  }, 20_000);
+
   return {
     sessionId,
     capabilities: data.result?.capabilities ?? {},
@@ -239,20 +293,27 @@ async function initializeMCPSessionHTTP(
   serverUrl: string,
   extraHeaders?: Record<string, string>
 ): Promise<MCPInitializeResult> {
-  const response = await fetch(serverUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...extraHeaders },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2024-11-05",
-        capabilities: { tools: {} },
-        clientInfo: { name: "Dactylo", version: "0.1.0" },
-      },
-    }),
-  });
+  const t1 = withTimeout(MCP_PROTOCOL_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(serverUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...extraHeaders },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          clientInfo: { name: "Dactylo", version: "0.1.0" },
+        },
+      }),
+      signal: t1.signal,
+    });
+  } finally {
+    t1.clear();
+  }
 
   if (!response.ok) {
     throw new Error(`MCP initialize failed: HTTP ${response.status}`);
@@ -261,15 +322,21 @@ async function initializeMCPSessionHTTP(
   const sessionId = response.headers.get("mcp-session-id") ?? "";
   const data = (await response.json()) as { result?: { capabilities?: Record<string, unknown> } };
 
-  await fetch(serverUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...extraHeaders,
-      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
-  });
+  const t2 = withTimeout(MCP_PROTOCOL_TIMEOUT_MS);
+  try {
+    await fetch(serverUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...extraHeaders,
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+      signal: t2.signal,
+    });
+  } finally {
+    t2.clear();
+  }
 
   return {
     sessionId,
@@ -290,15 +357,22 @@ export async function listMCPTools(
     return data.result?.tools ?? [];
   }
 
-  const response = await fetch(serverUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...extraHeaders,
-      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
-  });
+  const t = withTimeout(MCP_PROTOCOL_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(serverUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...extraHeaders,
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+      signal: t.signal,
+    });
+  } finally {
+    t.clear();
+  }
 
   if (!response.ok) {
     throw new Error(`MCP tools/list failed: HTTP ${response.status}`);
@@ -321,25 +395,33 @@ export async function callMCPTool(
       sessionId,
       "tools/call",
       { name: toolName, arguments: toolArgs },
-      extraHeaders
+      extraHeaders,
+      MCP_TOOL_TIMEOUT_MS
     )) as { result?: MCPCallResult };
     return data.result ?? { content: [] };
   }
 
-  const response = await fetch(serverUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...extraHeaders,
-      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: Date.now(),
-      method: "tools/call",
-      params: { name: toolName, arguments: toolArgs },
-    }),
-  });
+  const t = withTimeout(MCP_TOOL_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(serverUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...extraHeaders,
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method: "tools/call",
+        params: { name: toolName, arguments: toolArgs },
+      }),
+      signal: t.signal,
+    });
+  } finally {
+    t.clear();
+  }
 
   if (!response.ok) {
     throw new Error(`MCP tools/call failed: HTTP ${response.status}`);

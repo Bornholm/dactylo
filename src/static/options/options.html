@@ -39,14 +39,23 @@
         </p>
 
         <div class="form-group">
-          <label for="llm-endpoint">Endpoint API</label>
+          <label for="llm-provider">Provider</label>
+          <select id="llm-provider">
+            <option value="openai">OpenAI</option>
+            <option value="mistral">Mistral</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="llm-endpoint">Endpoint API (optionnel)</label>
           <input
             type="url"
             id="llm-endpoint"
             placeholder="https://api.openai.com/v1"
           />
           <span class="hint"
-            >URL de base de l'API (sans /chat/completions)</span
+            >Laissez vide pour utiliser l'URL par défaut du provider</span
           >
         </div>
 
